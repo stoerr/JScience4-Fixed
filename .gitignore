@@ -1,4 +1,8 @@
 /.classpath
 /.project
 /target
-*.class
+/api
+/bin
+
+*.zip
+/jscience.jar
