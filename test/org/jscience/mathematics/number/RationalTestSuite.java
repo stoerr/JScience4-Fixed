@@ -71,8 +71,8 @@ public class RationalTestSuite extends AbstractNumberTestSuite<Rational> {
             @Override
             public void execute() {
                 final Rational norm = Rational.valueOf(123 * 43423, 839 * 43423);
-                assertEquals(" normalize " + norm, 123, norm.getDividend().longValue());
-                assertEquals(" normalize " + norm, 839, norm.getDivisor().longValue());
+                assertEquals(" normalize " + norm, 123l, norm.getDividend().longValue());
+                assertEquals(" normalize " + norm, 839l, norm.getDivisor().longValue());
             }
         });
     }

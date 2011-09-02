@@ -151,6 +151,7 @@ public final class LargeInteger extends Number<LargeInteger> {
     static {
         LONG_MIN_VALUE._words[1] = 1;
         LONG_MIN_VALUE._size = 2;
+        LONG_MIN_VALUE._isNegative = true;
     }
 
     /**
@@ -158,8 +159,8 @@ public final class LargeInteger extends Number<LargeInteger> {
      */
     static final LargeInteger FIVE = new LargeInteger(1);
     static {
-        LONG_MIN_VALUE._words[1] = 5;
-        LONG_MIN_VALUE._size = 1;
+        FIVE._words[0] = 5;
+        FIVE._size = 1;
     }
 
     /**
@@ -250,9 +251,10 @@ public final class LargeInteger extends Number<LargeInteger> {
         }
         // Calculates size.
         while (li._words[wordIndex] == 0) {
-            if (--wordIndex < 0)
+            if (--wordIndex <= 0)
                 break;
         }
+        if (isNegative && wordIndex < 0) wordIndex = 0; // special case for -1
         li._size = wordIndex + 1;
         li._isNegative = isNegative;
 
@@ -447,11 +449,11 @@ public final class LargeInteger extends Number<LargeInteger> {
      */
     public int digitLength() {
         int bitLength = this.bitLength();
-        int min = (int) (bitLength * BITS_TO_DIGITS) + 1;
-        int max = (int) ((bitLength + 1) * BITS_TO_DIGITS) + 1;
+        int min = (int) ((bitLength-1) * BITS_TO_DIGITS) + 1;
+        int max = (int) (bitLength * BITS_TO_DIGITS) + 1;
         if (min == max)
             return min;
-        return (LargeInteger.ONE.times10pow(min + 1).isLargerThan(this)) ? min
+        return (LargeInteger.ONE.times10pow(min).isLargerThan(this)) ? min
                 : min + 1;
     }
 
@@ -733,7 +735,7 @@ public final class LargeInteger extends Number<LargeInteger> {
      * @throws ArithmeticException if <code>that.equals(ZERO)</code>
      */
     public LargeInteger divide(LargeInteger that) {
-        if ((that._size <= 1) && ((that._words[0] >> 32) == 0))
+        if ((that._size <= 1) && ((that._words[0] >> 31) == 0))
             return divide(that.intValue());
         LargeInteger result;
         LargeInteger remainder;
@@ -852,17 +854,22 @@ public final class LargeInteger extends Number<LargeInteger> {
      * @throws ArithmeticException if this integer is negative.
      */
     public LargeInteger sqrt() {
-        if (this.isNegative())
-            throw new ArithmeticException("Square root of negative integer");
+        if (this.isNegative()) throw new ArithmeticException("Square root of negative integer");
+        if (equals(ZERO)) return ZERO;
+        if (equals(ONE)) return ONE;
         int bitLength = this.bitLength();
         StackContext.enter();
         try {
             // First approximation.
             LargeInteger k = this.times2pow(-((bitLength >> 1) + (bitLength & 1)));
             while (true) {
-                LargeInteger newK = (k.plus(this.divide(k))).times2pow(-1);
-                if (newK.equals(k))
-                    return StackContext.outerCopy(k);
+                LargeInteger newK = k.plus(this.divide(k)).times2pow(-1);
+                if (!newK.minus(k).isLargerThan(ONE)) {
+                    if (this.divide(newK).isLessThan(newK)) {
+                        newK = newK.minus(ONE);
+                    }
+                    return StackContext.outerCopy(newK);
+                }
                 k = newK;
             }
         } finally {
@@ -902,7 +909,7 @@ public final class LargeInteger extends Number<LargeInteger> {
         StackContext.enter();
         try {
             // Extended Euclidian Algorithm
-            LargeInteger a = this;
+            LargeInteger a = this.mod(m);
             LargeInteger b = m;
             LargeInteger p = ONE;
             LargeInteger q = ZERO;
@@ -1224,8 +1231,10 @@ public final class LargeInteger extends Number<LargeInteger> {
      */
     public int hashCode() {
         long code = 0;
+        // 1327144033 is just an appropriately large prime;
+        // 1050537101 is 263 mod 1327144033 . The result is this.mod(1327144033) .
         for (int i = _size - 1; i >= 0; i--) {
-            code = code * 31 + _words[i];
+            code = (code * 1050537101 + _words[i]) % 1327144033;
         }
         return _isNegative ? -(int) code : (int) code;
     }
@@ -1303,7 +1312,7 @@ public final class LargeInteger extends Number<LargeInteger> {
      */
     public int compareTo(long value) {
         if (_size > 1)
-            return (value == Long.MAX_VALUE) && (this.equals(Long.MIN_VALUE)) ? 0
+            return (value == Long.MIN_VALUE) && (this.equals(Long.MIN_VALUE)) ? 0
                     : (_isNegative ? -1 : 1);
         // size <= 1
         long thisValue = _isNegative ? -_words[0] : _words[0];
@@ -1462,7 +1471,11 @@ public final class LargeInteger extends Number<LargeInteger> {
             out.append('0');
             divisor /= radix;
         }
-        return TypeFormat.format(rem, radix, out); // Writes low.
+        if (0 != rem) {
+            return TypeFormat.format(rem, radix, out); // Writes low.
+        } else {
+            return out;
+        }
     }
 
     private static final long serialVersionUID = 1L;

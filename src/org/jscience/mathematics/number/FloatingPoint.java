@@ -184,11 +184,13 @@ public final class FloatingPoint extends Number<FloatingPoint> implements
     public static FloatingPoint valueOf(double doubleValue) {
         if (doubleValue == 0.0)
             return FloatingPoint.ZERO;
+        if (doubleValue == 1.0)
+            return FloatingPoint.ONE;
         if (Double.isNaN(doubleValue) || Double.isInfinite(doubleValue))
             return FloatingPoint.NaN;
 
         // Find the exponent e such as: value == x.xxx * 10^e
-        int e = MathLib.floorLog10(doubleValue) - 18 + 1; // 18 digits significand.
+        int e = MathLib.floorLog10(MathLib.abs(doubleValue)) - 18 + 1; // 18 digits significand.
         long significand = MathLib.toLongPow10(doubleValue, -e);
         return FloatingPoint.valueOf(significand, e);
     }
@@ -258,7 +260,7 @@ public final class FloatingPoint extends Number<FloatingPoint> implements
     public LargeInteger round() {
         if (this == NaN)
             throw new ArithmeticException("Cannot convert NaN to integer value");
-        LargeInteger half = LargeInteger.FIVE.times10pow(_exponent - 1);
+        LargeInteger half = LargeInteger.FIVE.times10pow(-_exponent-1);
         return isNegative() ? _significand.minus(half).times10pow(_exponent)
                 : _significand.plus(half).times10pow(_exponent);
     }
@@ -296,7 +298,7 @@ public final class FloatingPoint extends Number<FloatingPoint> implements
      */
     public FloatingPoint minus(FloatingPoint that) {
         if (this._exponent > that._exponent)
-            return that.plus(this);
+            return that.opposite().plus(this);
         int pow10Scaling = that._exponent - this._exponent;
         LargeInteger thatScaled = that._significand.times10pow(pow10Scaling);
         return FloatingPoint.valueOf(_significand.minus(thatScaled), _exponent)
@@ -374,6 +376,7 @@ public final class FloatingPoint extends Number<FloatingPoint> implements
     public FloatingPoint sqrt() {
         if (this == NaN)
             return NaN;
+        if (isZero()) return ZERO;
         int pow10 = DIGITS.get() * 2 - _significand.digitLength();
         int exp = _exponent - pow10;
         if ((exp & 1) == 1) { // Ensures that exp is even.
@@ -481,7 +484,28 @@ public final class FloatingPoint extends Number<FloatingPoint> implements
      * @return the hash code value.
      */
     public int hashCode() {
-        return _significand.hashCode() - _exponent;
+        if (isZero()) return 0;
+        if (isNaN()) return 483929293; // some random number
+        // This is a random prime - the same as in LargeInteger.hashCode()
+        // We return _significand.mod(p).times(10.pow(-exp) mod p)
+        final long p = 1327144033;  
+        long code = _significand.hashCode();
+        int exp = _exponent;
+        long mult;
+        if (0 > exp) {
+            mult = 398143210; // modInverse of 10 mod p
+            exp = -exp;
+        } else {
+            mult = 10;
+        }
+        while (0 != exp) {
+            if (1 == exp % 2) {
+                code = (code * mult) % p;                
+            }
+            mult = (mult * mult) % p;
+            exp = exp / 2;
+        }
+        return (int) code;
     }
 
     /**
